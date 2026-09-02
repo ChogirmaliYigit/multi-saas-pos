@@ -1,0 +1,25 @@
+# Deployment secrets
+.env
+.env.*
+!*.example
+
+# Nginx templates get a .orig backup when a domain is substituted in
+deployment/nginx/conf.d/*.orig
+
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/

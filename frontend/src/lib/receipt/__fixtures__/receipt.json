@@ -1,0 +1,75 @@
+{
+  "order": {
+    "id": "a6ce8012-91f7-409d-a5ac-ae10da31d5a7",
+    "order_number": "MAIN-20260901-0001",
+    "status": "completed",
+    "branch_id": "5233094c-ca1b-4fa2-b32f-2c39391fa483",
+    "cashier_id": "f8e697bc-93e5-4fd8-9bbb-e432c5c0595f",
+    "customer_id": null,
+    "subtotal": "30.40",
+    "discount_total": "0.00",
+    "tax_total": "4.80",
+    "rounding_adjustment": "0.00",
+    "total": "30.40",
+    "paid_total": "30.40",
+    "change_due": "19.60",
+    "currency": "USD",
+    "note": null,
+    "completed_at": "2026-09-01T15:45:53.003547Z",
+    "created_at": "2026-09-01T15:45:52.891445Z",
+    "items": [
+      {
+        "id": "ec302dee-760f-4c04-8e88-bb47a627f216",
+        "product_id": "76b79e45-db8a-4fee-b7fb-1082c960deed",
+        "product_name": "Croissant",
+        "sku": "BAK-002",
+        "barcode": "2000000000022",
+        "quantity": "1.000",
+        "unit_price": "1.60",
+        "discount_amount": "0.00",
+        "tax_rate": "0.0000",
+        "tax_amount": "0.00",
+        "tax_inclusive": true,
+        "line_total": "1.60"
+      },
+      {
+        "id": "7cdf1228-6d2f-48e3-b08a-b8f90fbf0723",
+        "product_id": "f1b8afc7-8ff6-4715-8abf-f19678f73c64",
+        "product_name": "Cola 330ml can",
+        "sku": "DRK-001",
+        "barcode": "5449000000996",
+        "quantity": "24.000",
+        "unit_price": "1.20",
+        "discount_amount": "0.00",
+        "tax_rate": "0.2000",
+        "tax_amount": "4.80",
+        "tax_inclusive": true,
+        "line_total": "28.80"
+      }
+    ],
+    "payments": [
+      {
+        "id": "6c04ece6-aafd-4861-a998-7f4ce6b0bc8a",
+        "method": "cash",
+        "amount": "30.40",
+        "tendered_amount": "50.00",
+        "reference": null,
+        "card_last4": null
+      }
+    ]
+  },
+  "shop": {
+    "name": "Corner Store",
+    "branch_name": "Corner Store",
+    "address": null,
+    "phone": null,
+    "tax_number": null,
+    "header": null,
+    "footer": null,
+    "currency": "USD",
+    "locale": "en"
+  },
+  "cashier_name": "Dana Owner",
+  "customer_name": null,
+  "printed_at": "2026-09-01T15:49:31.305387Z"
+}

@@ -1,0 +1,260 @@
+# VPS deployment.
+#
+#   docker compose up -d                 API + workers + Postgres + Redis + Nginx
+#   docker compose --profile selfhost up -d   ...and the Next.js frontend too
+#
+# The frontend normally lives on Vercel; the "selfhost" profile is for running
+# the whole stack on one box.
+
+name: pos
+
+x-backend-env: &backend-env
+  ENVIRONMENT: ${ENVIRONMENT:-production}
+  SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-pos}
+  # The unprivileged runtime role. RLS only constrains connections that are
+  # neither superuser nor table owner, so the app must never use the admin
+  # credentials below.
+  POSTGRES_USER: ${POSTGRES_APP_USER:-pos_app}
+  POSTGRES_PASSWORD: ${POSTGRES_APP_PASSWORD:?POSTGRES_APP_PASSWORD is required}
+  # Schema owner. Used by Alembic only.
+  POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-pos}
+  POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD is required}
+
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+
+  BASE_DOMAIN: ${BASE_DOMAIN:?BASE_DOMAIN is required}
+  CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+  REPORT_STORAGE_DIR: /var/lib/pos/reports
+  REPORT_RETENTION_HOURS: ${REPORT_RETENTION_HOURS:-48}
+
+  SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
+  SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-}
+
+x-backend-image: &backend-image
+  image: pos-backend:${IMAGE_TAG:-latest}
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  # Never expose the API port on the host: Nginx is the only way in.
+  expose:
+    - "8000"
+  volumes:
+    - reports:/var/lib/pos/reports
+  networks:
+    - pos
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      # The container's superuser is the schema owner. The application role is
+      # created by migration 0004 with far narrower grants.
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-pos}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-pos}
+      # Slightly stricter than the default md5.
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No host port. The database is reachable only from the compose network;
+    # a Postgres on 0.0.0.0:5432 is found by scanners within hours.
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER:-pos} -d ${POSTGRES_DB:-pos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - pos
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # appendonly: a queued report should survive a restart rather than
+    # vanishing with the process.
+    command: >
+      redis-server
+      --appendonly yes
+      --save 60 1000
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+    volumes:
+      - redisdata:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - pos
+
+  # One-shot. Runs to completion before api/worker start, so the schema is
+  # never half-applied while requests are being served.
+  migrate:
+    <<: *backend-image
+    restart: "no"
+    command: >
+      sh -c "alembic upgrade head && python -m app.db.seed"
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose: []
+
+  api:
+    <<: *backend-image
+    environment:
+      <<: *backend-env
+    command: >
+      gunicorn app.main:app
+      --worker-class uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8000
+      --workers ${API_WORKERS:-4}
+      --timeout 60
+      --graceful-timeout 30
+      --keep-alive 5
+      --access-logfile -
+      --error-logfile -
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *backend-image
+    environment:
+      <<: *backend-env
+    # Report generation is CPU-bound PDF rendering; two workers is plenty for a
+    # single-VPS deployment and keeps memory predictable.
+    command: >
+      celery -A app.worker.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=${WORKER_CONCURRENCY:-2}
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    expose: []
+
+  # Scheduler for periodic jobs (currently: purging expired report files).
+  # Exactly one instance -- two beats means every job fires twice.
+  beat:
+    <<: *backend-image
+    environment:
+      <<: *backend-env
+    command: >
+      celery -A app.worker.celery_app.celery_app beat
+      --loglevel=info
+      --schedule=/var/lib/pos/reports/celerybeat-schedule
+      --pidfile=/tmp/celerybeat.pid
+    # Overrides the image's HTTP health check. Beat serves no HTTP, so it
+    # inherited a probe it could never pass and sat permanently "unhealthy" --
+    # which is worse than no check at all, because it trains you to ignore the
+    # column. This asks the only question that matters for a scheduler: is the
+    # process still alive?
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 $$(cat /tmp/celerybeat.pid)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    expose: []
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deployment/nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot-webroot:/var/www/certbot:ro
+      - certbot-certs:/etc/letsencrypt:ro
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - pos
+
+  # Renewal runs twice a day; certbot exits early when nothing is due.
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do
+               certbot renew --webroot -w /var/www/certbot --quiet;
+               sleep 12h & wait $${!};
+             done"
+    networks:
+      - pos
+
+  # Optional: the frontend on the same box instead of Vercel.
+  frontend:
+    profiles: ["selfhost"]
+    image: pos-frontend:${IMAGE_TAG:-latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+        NEXT_PUBLIC_BASE_DOMAIN: ${BASE_DOMAIN}
+    restart: unless-stopped
+    environment:
+      # Server-side calls stay on the compose network and never leave the box.
+      INTERNAL_API_URL: http://api:8000
+      NODE_ENV: production
+    expose:
+      - "3000"
+    depends_on:
+      - api
+    networks:
+      - pos
+
+volumes:
+  pgdata:
+  redisdata:
+  reports:
+  certbot-webroot:
+  certbot-certs:
+
+networks:
+  pos:
+    driver: bridge
