@@ -1,6 +1,30 @@
 # Multi-tenant SaaS Point of Sale
 
+<!--
+  Static "built with" badges only. There is deliberately no build or coverage
+  badge here: without a CI workflow behind it, a green "passing" shield asserts
+  something nobody is checking, and it stays green after the day it stops being
+  true. Add a workflow first, then add the badge that reports it.
+-->
+
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io)
+[![Celery](https://img.shields.io/badge/Celery-5.4-37814A?logo=celery&logoColor=white)](https://docs.celeryq.dev)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+
 Next.js frontend, FastAPI backend, PostgreSQL with row-level tenant isolation.
+
+**104 backend tests**, run against real PostgreSQL, Redis and Celery rather
+than mocks — including the concurrency case where two tills race for the last
+unit of stock, and database-level assertions that one shop cannot read
+another's rows.
 
 ```
 frontend/     Next.js 16 · React 19 · Tailwind 4 · shadcn/ui   (Vercel)
