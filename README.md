@@ -69,6 +69,7 @@ Every shop's data is separated three times over:
 | `backend/docs/schema.md` | Data model, isolation, POS/admin/platform internals |
 | `frontend/docs/architecture.md` | Token storage, route groups, chart palette |
 | `deployment/README.md` | VPS setup, certificates, deploys, backups |
+| `deployment/VERCEL.md` | Frontend on Vercel: settings, env, domains |
 
 ## Commands
 
