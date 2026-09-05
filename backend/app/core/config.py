@@ -89,6 +89,27 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:3000"
     PASSWORD_RESET_TTL_MINUTES: int = 60
 
+    # --- billing ----------------------------------------------------------
+    # Days a shop keeps trading after its subscription lapses. Cutting a shop
+    # off the moment a card fails costs more in support than the grace costs
+    # in revenue.
+    BILLING_GRACE_DAYS: int = 5
+    BILLING_CURRENCY: str = "UZS"
+
+    # Payme merchant credentials. The gateway authenticates to us with
+    # Basic "Paycom:<key>", so the key is a shared secret, not a token we send.
+    PAYME_MERCHANT_ID: str | None = None
+    PAYME_KEY: str | None = None
+    PAYME_TEST_KEY: str | None = None
+    PAYME_CHECKOUT_URL: str = "https://checkout.paycom.uz"
+
+    # Click merchant credentials.
+    CLICK_MERCHANT_ID: str | None = None
+    CLICK_SERVICE_ID: str | None = None
+    CLICK_SECRET_KEY: str | None = None
+    CLICK_MERCHANT_USER_ID: str | None = None
+    CLICK_CHECKOUT_URL: str = "https://my.click.uz/services/pay"
+
     REPORT_STORAGE_DIR: str = "/var/lib/pos/reports"
     REPORT_RETENTION_HOURS: int = 48
 
@@ -151,6 +172,16 @@ class Settings(BaseSettings):
     @property
     def email_configured(self) -> bool:
         return bool(self.SMTP_HOST)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def payme_configured(self) -> bool:
+        return bool(self.PAYME_MERCHANT_ID and self.PAYME_KEY)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def click_configured(self) -> bool:
+        return bool(self.CLICK_SERVICE_ID and self.CLICK_SECRET_KEY and self.CLICK_MERCHANT_ID)
 
 
 @lru_cache

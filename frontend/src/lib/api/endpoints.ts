@@ -9,6 +9,7 @@ import type {
   ShiftSummary,
 } from "./pos-types";
 import type {
+  BillingOverview,
   DashboardSummary,
   Employee,
   LowStockItem,
@@ -302,4 +303,8 @@ export const platformApi = {
     api.patch<Plan>(`/platform/plans/${id}`, body),
   retirePlan: (id: string) =>
     api.delete<{ message: string }>(`/platform/plans/${id}`),
+};
+
+export const billingApi = {
+  overview: () => api.get<BillingOverview>("/billing"),
 };

@@ -8,6 +8,7 @@ it immediately, and the worker fills in `file_url` when the file is on disk.
 from __future__ import annotations
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -36,6 +37,12 @@ celery_app.conf.update(
         "purge-expired-reports": {
             "task": "app.worker.tasks.purge_expired_reports",
             "schedule": 3600.0,
+        },
+        # Daily. Idempotent, so a missed run catches up rather than
+        # double-billing anyone.
+        "run-billing-cycle": {
+            "task": "app.worker.tasks.run_billing_cycle",
+            "schedule": crontab(hour=2, minute=30),
         },
     },
 )

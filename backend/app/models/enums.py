@@ -112,3 +112,23 @@ class ReportFormat(str, enum.Enum):
     CSV = "csv"
     PDF = "pdf"
     XLSX = "xlsx"
+
+
+class PaymentProvider(str, enum.Enum):
+    PAYME = "payme"
+    CLICK = "click"
+    MANUAL = "manual"
+
+
+class TransactionState(str, enum.Enum):
+    """Deliberately provider-neutral.
+
+    Payme and Click describe the same lifecycle with different vocabularies
+    and different integer codes; each adapter maps to and from these so the
+    billing domain never learns a provider's dialect.
+    """
+
+    CREATED = "created"  # provider holds it, money not moved
+    PERFORMED = "performed"  # paid
+    CANCELLED = "cancelled"  # cancelled before payment
+    REFUNDED = "refunded"  # cancelled after payment

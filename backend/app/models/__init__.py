@@ -15,6 +15,7 @@ from app.models.enums import (
     InvoiceStatus,
     OrderStatus,
     PaymentMethod,
+    PaymentProvider,
     PaymentStatus,
     ProductUnit,
     ReportFormat,
@@ -36,7 +37,12 @@ from app.models.sales import (
     Refund,
     Shift,
 )
-from app.models.subscription import Plan, Subscription, SubscriptionInvoice
+from app.models.subscription import (
+    PaymentTransaction,
+    Plan,
+    Subscription,
+    SubscriptionInvoice,
+)
 from app.models.tenant import Branch, Tenant
 from app.models.user import PasswordResetToken, RefreshToken, User
 
@@ -58,6 +64,7 @@ __all__ = [
     "Payment",
     "Refund",
     "Shift",
+    "PaymentTransaction",
     "Plan",
     "Subscription",
     "SubscriptionInvoice",
@@ -79,6 +86,7 @@ __all__ = [
     "ShiftStatus",
     "StockMovementType",
     "SubscriptionStatus",
+    "TransactionState",
     "TenantStatus",
     "UserRole",
 ]

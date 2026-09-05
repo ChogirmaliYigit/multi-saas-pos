@@ -225,3 +225,39 @@ export interface OrderRefundView {
   lines: RefundableLine[];
   refunds: Refund[];
 }
+
+export interface Invoice {
+  id: string;
+  number: string;
+  status: "draft" | "open" | "paid" | "void" | "uncollectible";
+  amount_due: string;
+  amount_paid: string;
+  currency: string;
+  period_start: string;
+  period_end: string;
+  issued_at: string;
+  paid_at: string | null;
+}
+
+export interface PayLink {
+  provider: string;
+  label: string;
+  url: string;
+}
+
+export interface BillingOverview {
+  plan_name: string | null;
+  plan_code: string | null;
+  status: string | null;
+  billing_cycle: string | null;
+  amount: string;
+  currency: string;
+  current_period_end: string | null;
+  trial_ends_at: string | null;
+  cancel_at_period_end: boolean;
+  tenant_status: string;
+  grace_days_remaining: number | null;
+  outstanding: Invoice | null;
+  pay_links: PayLink[];
+  invoices: Invoice[];
+}

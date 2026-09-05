@@ -183,3 +183,37 @@ def purge_expired_reports() -> dict:
         session.close()
 
     return {"removed": removed}
+
+
+@celery_app.task(name="app.worker.tasks.run_billing_cycle")
+def run_billing_cycle() -> dict:
+    """Daily: invoice ended periods, then suspend anything past its grace.
+
+    Runs as the platform, because it deliberately spans every tenant. Safe to
+    run more than once a day -- invoicing is idempotent per period and
+    suspension is a no-op on an already-suspended shop.
+    """
+    import asyncio
+
+    from sqlalchemy import text as _text
+
+    session = _SessionLocal()
+    try:
+        session.execute(_text("SELECT set_config('app.is_platform', 'on', true)"))
+        # billing_service is async; the worker is not.
+        result = asyncio.run(_run_billing(session))
+        session.commit()
+        logger.info("Billing cycle: %s", result)
+        return result
+    except Exception:
+        session.rollback()
+        logger.exception("Billing cycle failed")
+        raise
+    finally:
+        session.close()
+
+
+async def _run_billing(session) -> dict:
+    from app.services import billing_service
+
+    return await billing_service.run_billing_cycle(session)

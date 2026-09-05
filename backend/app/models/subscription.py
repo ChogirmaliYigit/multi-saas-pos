@@ -6,10 +6,12 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -21,7 +23,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base
 from app.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.enums import BillingCycle, InvoiceStatus, SubscriptionStatus
+from app.models.enums import (
+    BillingCycle,
+    InvoiceStatus,
+    PaymentProvider,
+    SubscriptionStatus,
+    TransactionState,
+)
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
@@ -142,3 +150,65 @@ class SubscriptionInvoice(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     subscription: Mapped[Subscription] = relationship(back_populates="invoices")
+    transactions: Mapped[list[PaymentTransaction]] = relationship(
+        back_populates="invoice", cascade="all, delete-orphan"
+    )
+
+
+class PaymentTransaction(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """One attempt by a gateway to collect one invoice.
+
+    Not tenant-scoped in the RLS sense: gateways call in with no session, and
+    the row has to be findable by the provider's own id before any tenant
+    context exists. tenant_id is carried for reporting and is set from the
+    invoice.
+
+    Both Payme and Click can call the same transaction repeatedly -- retries,
+    status polls, late cancellations -- so every handler is written to be
+    idempotent against this row.
+    """
+
+    __tablename__ = "payment_transactions"
+    __table_args__ = (
+        # A provider's id is unique within that provider, not across them.
+        UniqueConstraint("provider", "external_id", name="uq_payment_tx_provider_external"),
+        Index("ix_payment_tx_invoice", "invoice_id"),
+        Index("ix_payment_tx_state", "state"),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subscription_invoices.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+
+    provider: Mapped[PaymentProvider] = mapped_column(
+        Enum(PaymentProvider, name="payment_provider"), nullable=False
+    )
+    external_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    state: Mapped[TransactionState] = mapped_column(
+        Enum(TransactionState, name="transaction_state"),
+        nullable=False,
+        default=TransactionState.CREATED,
+    )
+
+    # Stored in the shop's currency, not the provider's minor units. Adapters
+    # convert at the edge so one provider's use of tiyin does not leak into
+    # the rest of the system.
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="UZS")
+
+    # Provider clocks, kept as they were sent. Payme expects the exact values
+    # back in CheckTransaction, so they are not re-derived locally.
+    created_time: Mapped[int | None] = mapped_column(BigInteger)
+    performed_time: Mapped[int | None] = mapped_column(BigInteger)
+    cancelled_time: Mapped[int | None] = mapped_column(BigInteger)
+    cancel_reason: Mapped[int | None] = mapped_column(Integer)
+
+    # The raw request, for reconciling a dispute months later.
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    invoice: Mapped[SubscriptionInvoice] = relationship(back_populates="transactions")
