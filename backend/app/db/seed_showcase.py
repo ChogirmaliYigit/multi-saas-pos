@@ -24,8 +24,9 @@ import sys
 import uuid as uuid_lib
 from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from app.core.security import hash_password, hash_pin
 from app.db.session import AsyncSessionLocal, session_tenant_scope
@@ -42,7 +43,15 @@ from app.models.enums import (
     UserRole,
 )
 from app.models.inventory import StockItem, StockMovement
-from app.models.sales import Customer, Order, OrderItem, Payment, Refund, Shift
+from app.models.sales import (
+    Customer,
+    Order,
+    OrderCounter,
+    OrderItem,
+    Payment,
+    Refund,
+    Shift,
+)
 from app.models.tenant import Branch, Tenant
 from app.models.user import User
 from app.services import pricing
@@ -420,6 +429,7 @@ async def _reset(session, tenant: Tenant) -> None:
         TaxRate,
         Customer,
         Supplier,
+        OrderCounter,
     ):
         await session.execute(delete(model))
 
@@ -463,6 +473,7 @@ async def seed_showcase(slug: str, *, reset: bool = False) -> dict:
             # ------------------------------------------------------------------
             # Shop identity
             # ------------------------------------------------------------------
+            tenant.timezone = "Asia/Tashkent"
             tenant.name = "Demo Market"
             tenant.legal_name = '"Demo Market" MChJ'
             tenant.tax_number = "301234567"
@@ -635,6 +646,10 @@ async def seed_showcase(slug: str, *, reset: bool = False) -> dict:
             methods = [m for m, _ in PAYMENT_MIX]
             method_weights = [w for _, w in PAYMENT_MIX]
 
+            try:
+                shop_tz = ZoneInfo(tenant.timezone)
+            except Exception:
+                shop_tz = UTC
             counters: dict[str, int] = {}
             totals = {"orders": 0, "revenue": Decimal("0"), "refunds": 0}
             all_orders: list[Order] = []
@@ -765,7 +780,7 @@ async def seed_showcase(slug: str, *, reset: bool = False) -> dict:
                         order_discount_value=discount_value,
                     )
 
-                    period = day.strftime("%Y%m%d")
+                    period = when.astimezone(shop_tz).strftime("%Y%m%d")
                     counters[period] = counters.get(period, 0) + 1
                     order_number = f"{branch.code}-{period}-{counters[period]:04d}"
 
@@ -891,6 +906,32 @@ async def seed_showcase(slug: str, *, reset: bool = False) -> dict:
                     drift = Decimal(rng.choice([0, 0, 0, -5000, -2000, 2000, 5000]))
                     shift.counted_cash = shift.expected_cash + drift
                     shift.cash_difference = drift
+
+            # Hand the receipt series over to the application. next_order_number
+            # counts from this table, so without it the first real sale after a
+            # seed restarts at 0001 and collides with a seeded receipt number --
+            # a unique-constraint violation on the very first checkout someone
+            # tries in the demo.
+            for period, last_value in counters.items():
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO order_counters
+                            (tenant_id, branch_id, period, last_value, created_at, updated_at)
+                        VALUES (:tenant_id, :branch_id, :period, :last_value, now(), now())
+                        ON CONFLICT (tenant_id, branch_id, period)
+                        DO UPDATE SET last_value = GREATEST(
+                            order_counters.last_value, EXCLUDED.last_value
+                        )
+                        """
+                    ),
+                    {
+                        "tenant_id": tenant.id,
+                        "branch_id": branch.id,
+                        "period": period,
+                        "last_value": last_value,
+                    },
+                )
 
             # ------------------------------------------------------------------
             # A handful of refunds, so the sales screen is not uniformly happy
