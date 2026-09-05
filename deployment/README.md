@@ -87,16 +87,42 @@ remove the old ones in a later release.
 
 ## Backups
 
+Install once, as the deploy user:
+
 ```bash
-./deployment/scripts/backup.sh      # cron: 0 3 * * *
+sudo ./deployment/scripts/install-backup-cron.sh
 ```
 
-Custom-format dumps, verified with `pg_restore --list` before the old ones are
-pruned — an unverified backup is a hypothesis. Restore:
+That creates `/var/backups/pos` (mode 0700 — dumps hold every shop's trading
+history in the clear), sets up logrotate, and adds a nightly crontab entry for
+the deploy user rather than root, because the job runs `docker compose`.
+
+Each run writes a custom-format dump, refuses anything under 1KB, and verifies
+the archive before pruning older ones. A truncated dump that still exits 0
+looks like a backup right up until the day you need it.
+
+**Verify that it actually restores**, periodically and after any schema change:
+
+```bash
+./deployment/scripts/verify-restore.sh
+```
+
+This restores the newest dump into a scratch database and checks the tables,
+seeded plans, migration state, and that row-level security survived. That last
+one matters: policies are schema objects, and a dump that quietly lost them
+would restore a database with no tenant isolation at all. `pg_restore --list`
+alone would not notice.
+
+Manual restore:
 
 ```bash
 docker compose exec -T postgres pg_restore -U pos -d pos --clean --if-exists < backup.dump
 ```
+
+Note the dumps live on the same disk as the database. That covers a bad
+migration or a mistaken `DELETE`; it does not cover losing the instance. Copy
+them off the box — S3, or another host — before treating this as a real
+backup strategy.
 
 ## Frontend on Vercel
 
