@@ -183,3 +183,49 @@ the column. It now checks its own pidfile.
 Verified from an empty slate — no volumes, no database, no certificates — that
 all six migrations apply, every service reaches healthy, and a shop can sign
 up, open a till, ring up a sale and export a report through Nginx over TLS.
+
+---
+
+## Payment gateways
+
+Stripe does not operate in Uzbekistan. Payme and Click do, and they invert the
+usual integration: instead of us creating a session and receiving a webhook,
+**the gateway calls us** and drives the transaction.
+
+Register these callback URLs in each provider's merchant cabinet:
+
+| Provider | URL |
+|---|---|
+| Payme | `https://api.<domain>/api/v1/billing/payme` |
+| Click — Prepare | `https://api.<domain>/api/v1/billing/click/prepare` |
+| Click — Complete | `https://api.<domain>/api/v1/billing/click/complete` |
+
+Then fill the credentials in `.env` and `docker compose up -d api`.
+
+These are the only unauthenticated write endpoints in the system, and they
+have to be — the caller is a gateway with no session. Authentication is the
+provider's own scheme, checked inside the adapter before anything is written:
+HTTP Basic `Paycom:<key>` for Payme, an MD5 signature over a fixed field order
+for Click. Both are verified before a single row is touched.
+
+Leave a provider's credentials blank and its payment button simply does not
+appear. A dead button is worse than none: the shop assumes their card failed
+rather than that nobody wired up the provider.
+
+**Payme always gets a 200**, errors included. It reads a non-200 as a
+transport failure and retries forever, which turns a permanent rejection into
+a loop.
+
+### Dunning
+
+`run_billing_cycle` runs daily at 02:30 UTC via Celery beat:
+
+1. subscriptions past their period end get an invoice
+2. invoices unpaid past `BILLING_GRACE_DAYS` (default 5) suspend the shop
+
+In that order, so a shop is never suspended in the same run that first
+invoiced it. Paying reopens a suspended shop immediately. Nothing is ever
+deleted.
+
+The task is idempotent — invoicing is keyed to the period — so a missed day
+catches up rather than double-billing anyone.
