@@ -93,13 +93,23 @@ NOTE
 
 read -rp "Issue the api.$DOMAIN certificate now? [y/N] " reply
 if [[ "$reply" =~ ^[Yy]$ ]]; then
-    # --force-renewal so the self-signed placeholder is definitely replaced;
-    # certbot would otherwise see a valid-looking certificate and skip.
+    # Remove the placeholder before asking certbot for the real thing.
+    #
+    # certbot refuses to write into a live/ directory it did not create --
+    # "live directory exists" -- and there is no flag that overrides it. Nginx
+    # is already running and holds the certificate it loaded in memory, so
+    # deleting the files underneath it is safe; it picks up the real one on
+    # the reload below.
+    docker compose run --rm --entrypoint sh certbot -c \
+        "rm -rf /etc/letsencrypt/live/api.$DOMAIN \
+                /etc/letsencrypt/archive/api.$DOMAIN \
+                /etc/letsencrypt/renewal/api.$DOMAIN.conf"
+
     docker compose run --rm --entrypoint certbot certbot \
         certonly --webroot -w /var/www/certbot \
         -d "api.$DOMAIN" \
         --email "$EMAIL" --agree-tos --no-eff-email \
-        --force-renewal --non-interactive
+        --non-interactive
 
     echo "==> Reloading Nginx"
     docker compose exec nginx nginx -s reload
