@@ -38,7 +38,11 @@ async def product(client: AsyncClient, headers: dict, sku: str) -> dict:
 
 
 async def sell(
-    client: AsyncClient, headers: dict, items: list[tuple[str, str]], paid: str, tendered: str | None = None
+    client: AsyncClient,
+    headers: dict,
+    items: list[tuple[str, str]],
+    paid: str,
+    tendered: str | None = None,
 ) -> dict:
     """items: [(sku, qty)]"""
     lines = []
@@ -66,7 +70,8 @@ async def test_full_refund_returns_everything_and_restocks(client: AsyncClient):
     order = await sell(client, headers, [("DRK-001", "3")], "3.60")
 
     resp = await client.post(
-        f"/api/v1/orders/{order['id']}/refund", json={"reason": "Customer changed mind"},
+        f"/api/v1/orders/{order['id']}/refund",
+        json={"reason": "Customer changed mind"},
         headers=headers,
     )
     assert resp.status_code == 201, resp.text
@@ -272,7 +277,7 @@ async def test_discounted_line_refunds_what_was_actually_paid(client: AsyncClien
             headers=headers,
         )
     ).json()
-    assert Decimal(order["total"]) == Decimal("2.40")   # 4.80 less 50%
+    assert Decimal(order["total"]) == Decimal("2.40")  # 4.80 less 50%
 
     item_id = order["items"][0]["id"]
     resp = await client.post(
@@ -348,7 +353,9 @@ async def test_idempotency_key_prevents_a_double_refund(client: AsyncClient):
     payload = {"idempotency_key": "till-1-refund-abc"}
 
     first = await client.post(f"/api/v1/orders/{order['id']}/refund", json=payload, headers=headers)
-    second = await client.post(f"/api/v1/orders/{order['id']}/refund", json=payload, headers=headers)
+    second = await client.post(
+        f"/api/v1/orders/{order['id']}/refund", json=payload, headers=headers
+    )
 
     assert first.status_code == 201 and second.status_code == 201
     assert first.json()["id"] == second.json()["id"]
@@ -372,9 +379,7 @@ async def test_cross_tenant_refund_is_impossible(client: AsyncClient):
     )
     other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
 
-    resp = await client.post(
-        f"/api/v1/orders/{order['id']}/refund", json={}, headers=other_headers
-    )
+    resp = await client.post(f"/api/v1/orders/{order['id']}/refund", json={}, headers=other_headers)
     assert resp.status_code == 404, "another shop's order was visible"
 
 
