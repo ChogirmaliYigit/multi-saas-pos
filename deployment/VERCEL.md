@@ -79,3 +79,30 @@ subdomains do not need listing. After changing it: `docker compose up -d api`.
 Vercel builds on every push to `main`. Because the API URL is baked in at build
 time, changing it means triggering a **redeploy**, not just editing the
 variable.
+
+---
+
+## Two things that cost real time on the first deploy
+
+**`output: "standalone"` silently produces an empty deployment.** The build
+compiles, generates static pages, reports success — and Vercel ends up with
+nothing to serve, because standalone writes to `.next/standalone` where its
+pipeline does not look. Every host then answers `DEPLOYMENT_NOT_FOUND`, which
+reads like a domain misconfiguration and sends you to the DNS panel. It is not.
+`next.config.ts` now disables standalone when `process.env.VERCEL` is set, and
+keeps it for the self-hosted image.
+
+**The apex and `www` are not interchangeable.** `www` uses a CNAME to
+`cname.vercel-dns.com` and works as soon as it propagates. The apex needs an A
+record, and if the domain previously pointed somewhere else, resolvers keep
+answering with the *old* IP until that record's TTL expires — up to several
+hours. During that window the apex alternates between working and failing to
+connect, while `www` is fine throughout.
+
+Check the authoritative servers rather than a public resolver before assuming
+the zone is wrong:
+
+```bash
+dig @rdns1.your-registrar joinpay.uz A +short   # what the zone says
+dig joinpay.uz A @8.8.8.8 +short                # what the internet remembers
+```
