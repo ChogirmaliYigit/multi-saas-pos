@@ -16,6 +16,8 @@ import type {
   PlanUsage,
   ProductDetail,
   ProductListItem,
+  OrderRefundView,
+  Refund,
   ReportJob,
   RevenuePoint,
   SalesByHour,
@@ -130,6 +132,19 @@ export const ordersApi = {
   receipt: (id: string) => api.get<Receipt>(`/orders/${id}/receipt`),
   list: (params: { page?: number; size?: number } = {}) =>
     api.get<Page<Order>>("/orders", { query: params }),
+
+  refundable: (id: string) => api.get<OrderRefundView>(`/orders/${id}/refundable`),
+
+  refund: (
+    id: string,
+    body: {
+      lines?: { order_item_id: string; quantity: string }[];
+      method?: string | null;
+      reason?: string | null;
+      restock?: boolean;
+      idempotency_key?: string;
+    },
+  ) => api.post<Refund>(`/orders/${id}/refund`, body),
 };
 
 export const shiftsApi = {

@@ -52,6 +52,7 @@ export interface OrderItem {
   tax_amount: string;
   tax_inclusive: boolean;
   line_total: string;
+  refunded_quantity: string;
 }
 
 export interface OrderPayment {
@@ -77,6 +78,7 @@ export interface Order {
   total: string;
   paid_total: string;
   change_due: string;
+  refunded_total: string;
   currency: string;
   note: string | null;
   completed_at: string | null;

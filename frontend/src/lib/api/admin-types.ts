@@ -181,3 +181,47 @@ export interface ReportJob {
   expires_at: string | null;
   is_downloadable: boolean;
 }
+
+export interface RefundLine {
+  order_item_id: string;
+  product_name: string;
+  quantity: string;
+  amount: string;
+  tax_amount: string;
+}
+
+export interface Refund {
+  id: string;
+  order_id: string;
+  amount: string;
+  method: string;
+  reason: string | null;
+  restocked: boolean;
+  created_at: string;
+  created_by_id: string | null;
+  lines: RefundLine[];
+}
+
+export interface RefundableLine {
+  order_item_id: string;
+  product_name: string;
+  sku: string | null;
+  quantity: string;
+  refunded_quantity: string;
+  refundable_quantity: string;
+  unit_price: string;
+  line_total: string;
+  refundable_amount: string;
+}
+
+export interface OrderRefundView {
+  order_number: string;
+  status: string;
+  total: string;
+  refunded_total: string;
+  refundable_total: string;
+  currency: string;
+  completed_at: string | null;
+  lines: RefundableLine[];
+  refunds: Refund[];
+}
