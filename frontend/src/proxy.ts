@@ -6,7 +6,13 @@ const BASE_DOMAIN = process.env.NEXT_PUBLIC_BASE_DOMAIN ?? "localhost:3000";
 const REFRESH_COOKIE = "pos_refresh";
 
 /** Routes reachable without a session. */
-const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  // Reached from an email link, by someone who cannot sign in.
+  "/reset-password",
+];
 
 /**
  * Runs on every matched request, before routing (Next 16 renamed this

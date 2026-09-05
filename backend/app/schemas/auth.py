@@ -78,6 +78,18 @@ class SignupRequest(BaseModel):
         return v
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+    # Needed when the request does not arrive on a tenant subdomain. Without
+    # it the lookup falls to the platform namespace.
+    tenant_slug: str | None = Field(default=None, max_length=63)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=10, max_length=128)

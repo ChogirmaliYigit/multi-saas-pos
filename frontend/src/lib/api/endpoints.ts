@@ -52,6 +52,21 @@ export const authApi = {
       new_password: newPassword,
     }),
   setPin: (pin: string) => api.post<{ message: string }>("/auth/set-pin", { pin }),
+
+  // Both are public -- the caller has no session by definition.
+  forgotPassword: (email: string, tenantSlug: string | null) =>
+    api.post<{ message: string }>(
+      "/auth/forgot-password",
+      { email, tenant_slug: tenantSlug },
+      { anonymous: true },
+    ),
+
+  resetPassword: (token: string, newPassword: string) =>
+    api.post<{ message: string }>(
+      "/auth/reset-password",
+      { token, new_password: newPassword },
+      { anonymous: true },
+    ),
 };
 
 /** Auth flows that must go through the BFF so the refresh cookie is set. */

@@ -83,7 +83,15 @@ export function LoginForm({ tenantSlug }: { tenantSlug: string | null }) {
             </Field>
 
             <Field data-invalid={!!form.formState.errors.password}>
-              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <div className="flex items-baseline justify-between">
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <Link
+                  href="/forgot-password"
+                  className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-4"
+                >
+                  Forgot?
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"

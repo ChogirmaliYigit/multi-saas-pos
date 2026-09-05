@@ -17,6 +17,7 @@ from app.core.exceptions import (
 )
 from app.core.security import (
     create_token,
+    generate_secret,
     hash_password,
     hash_refresh_token,
     password_needs_rehash,
@@ -33,8 +34,9 @@ from app.models.enums import (
 )
 from app.models.subscription import Plan, Subscription
 from app.models.tenant import Branch, Tenant
-from app.models.user import RefreshToken, User
+from app.models.user import PasswordResetToken, RefreshToken, User
 from app.schemas.auth import SignupRequest, TokenPair
+from app.services import email_service
 
 _NO_FILTER = {SKIP_TENANT_FILTER: True}
 
@@ -386,3 +388,140 @@ async def signup(db: AsyncSession, payload: SignupRequest) -> tuple[Tenant, User
         await db.flush()
 
     return tenant, owner
+
+
+# ---------------------------------------------------------------------------
+# Password reset
+# ---------------------------------------------------------------------------
+
+
+async def request_password_reset(
+    db: AsyncSession,
+    *,
+    email: str,
+    tenant_slug: str | None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+) -> None:
+    """Issue a reset link, if that address belongs to anyone.
+
+    Returns nothing, always, and the endpoint answers identically whether or
+    not the account exists. A "no such user" response here would turn the
+    forgot-password form into a directory of who works at a shop -- and the
+    people most likely to probe it are the ones a shop least wants finding
+    out.
+    """
+    stmt = (
+        select(User)
+        .where(func.lower(User.email) == email.lower(), User.deleted_at.is_(None))
+        .execution_options(**_NO_FILTER)
+    )
+
+    tenant: Tenant | None = None
+    if tenant_slug:
+        tenant = await db.scalar(
+            select(Tenant)
+            .where(Tenant.slug == tenant_slug, Tenant.deleted_at.is_(None))
+            .execution_options(**_NO_FILTER)
+        )
+        if tenant is None:
+            return
+        stmt = stmt.where(User.tenant_id == tenant.id)
+    else:
+        stmt = stmt.where(User.tenant_id.is_(None))
+
+    async with auth_lookup_scope(db):
+        user = await db.scalar(stmt)
+
+        if user is None or not user.is_active:
+            return
+        if tenant is not None and not tenant.is_operational:
+            # A suspended shop cannot reset its way back in.
+            return
+
+        # Invalidate anything outstanding: a second request should not leave
+        # two working links in two different inboxes.
+        outstanding = await db.scalars(
+            select(PasswordResetToken)
+            .where(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.used_at.is_(None),
+            )
+            .execution_options(**_NO_FILTER)
+        )
+        now = _now()
+        for token in outstanding:
+            token.used_at = now
+
+        secret = generate_secret(32)
+        db.add(
+            PasswordResetToken(
+                tenant_id=user.tenant_id,
+                user_id=user.id,
+                token_hash=hash_refresh_token(secret),
+                expires_at=now + timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES),
+                requested_ip=ip_address,
+                user_agent=user_agent,
+            )
+        )
+        await db.flush()
+
+    # The link goes to the frontend, which posts the token back to the API.
+    base = settings.APP_BASE_URL.rstrip("/")
+    reset_url = f"{base}/reset-password?token={secret}"
+    if tenant_slug:
+        reset_url += f"&shop={tenant_slug}"
+
+    subject, text, html = email_service.password_reset_email(
+        to=user.email,
+        full_name=user.full_name,
+        shop_name=tenant.name if tenant else None,
+        reset_url=reset_url,
+        ttl_minutes=settings.PASSWORD_RESET_TTL_MINUTES,
+    )
+    # Sent inline rather than queued: it is one small message, and a queue
+    # would mean a reset silently fails whenever Redis is down. email_service
+    # never raises, so a dead SMTP server cannot break the response.
+    email_service.send(user.email, subject, text, html)
+
+
+async def reset_password(db: AsyncSession, *, token: str, new_password: str) -> User:
+    """Consume a reset token and set the new password."""
+    digest = hash_refresh_token(token)
+
+    async with auth_lookup_scope(db):
+        record = await db.scalar(
+            select(PasswordResetToken)
+            .where(PasswordResetToken.token_hash == digest)
+            .execution_options(**_NO_FILTER)
+        )
+        # One error for every failure mode -- unknown, expired and already
+        # used are indistinguishable, so a probe learns nothing.
+        if record is None or not record.is_usable:
+            raise InvalidCredentialsError(
+                "That reset link is invalid or has expired.",
+                code="invalid_reset_token",
+            )
+
+        user = await db.scalar(
+            select(User)
+            .where(User.id == record.user_id, User.deleted_at.is_(None))
+            .execution_options(**_NO_FILTER)
+        )
+        if user is None or not user.is_active:
+            raise InvalidCredentialsError(
+                "That reset link is invalid or has expired.",
+                code="invalid_reset_token",
+            )
+
+        record.used_at = _now()
+        user.hashed_password = hash_password(new_password)
+        # A lockout should not outlive the reset that fixes it.
+        user.failed_login_count = 0
+        user.locked_until = None
+        await db.flush()
+
+    # Everything else is signed out. Someone resetting a password is often
+    # doing it because they think an existing session is not theirs.
+    await _revoke_all_in_new_transaction(user.id)
+    return user

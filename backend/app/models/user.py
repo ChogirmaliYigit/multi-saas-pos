@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -127,3 +127,40 @@ class RefreshToken(Base, UUIDPrimaryKeyMixin, OptionalTenantMixin, TimestampMixi
     ip_address: Mapped[str | None] = mapped_column(String(45))
 
     user: Mapped[User] = relationship(back_populates="refresh_tokens")
+
+
+class PasswordResetToken(Base, UUIDPrimaryKeyMixin, OptionalTenantMixin, TimestampMixin):
+    """A single-use, short-lived password reset.
+
+    Stored as a SHA-256 digest for the same reason refresh tokens are: a
+    database leak must not hand an attacker a working reset link for every
+    account that has requested one.
+
+    tenant_id mirrors the user's, so platform staff (NULL tenant) can reset
+    too.
+    """
+
+    __tablename__ = "password_reset_tokens"
+    __table_args__ = (
+        # Expired and used tokens are purged by a periodic task; this index
+        # is what makes that cheap.
+        Index("ix_password_reset_expires", "expires_at"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Recorded so an operator investigating a flood of resets can see where
+    # they came from.
+    requested_ip: Mapped[str | None] = mapped_column(String(45))
+    user_agent: Mapped[str | None] = mapped_column(Text)
+
+    user: Mapped[User] = relationship()
+
+    @property
+    def is_usable(self) -> bool:
+        return self.used_at is None and self.expires_at > datetime.now(UTC)

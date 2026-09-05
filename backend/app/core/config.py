@@ -72,6 +72,23 @@ class Settings(BaseSettings):
     SUPER_ADMIN_EMAIL: str | None = None
     SUPER_ADMIN_PASSWORD: str | None = None
 
+    # --- email ------------------------------------------------------------
+    # SMTP rather than a provider SDK: it works with any host, which matters
+    # for a self-hosted VPS. Leave SMTP_HOST blank and outgoing mail is
+    # logged instead of sent -- useful in development, and it keeps password
+    # reset from silently half-working when nobody configured mail.
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_STARTTLS: bool = True
+    SMTP_FROM: str = "POS <no-reply@localhost>"
+    SMTP_TIMEOUT: int = 15
+
+    # Reset links point here; it is the frontend, not the API.
+    APP_BASE_URL: str = "http://localhost:3000"
+    PASSWORD_RESET_TTL_MINUTES: int = 60
+
     REPORT_STORAGE_DIR: str = "/var/lib/pos/reports"
     REPORT_RETENTION_HOURS: int = 48
 
@@ -129,6 +146,11 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def email_configured(self) -> bool:
+        return bool(self.SMTP_HOST)
 
 
 @lru_cache

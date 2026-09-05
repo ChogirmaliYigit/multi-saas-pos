@@ -11,9 +11,11 @@ from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     PinLoginRequest,
     RefreshRequest,
+    ResetPasswordRequest,
     SessionInfo,
     SetPinRequest,
     SignupRequest,
@@ -156,3 +158,38 @@ async def change_password(
 async def set_pin(payload: SetPinRequest, db: DbSession, current_user: CurrentUser) -> Message:
     current_user.pin_hash = hash_pin(payload.pin)
     return Message(message="Terminal PIN updated.")
+
+
+@router.post("/forgot-password", response_model=Message)
+async def forgot_password(
+    payload: ForgotPasswordRequest, request: Request, db: DbSession
+) -> Message:
+    """Send a reset link.
+
+    Always answers the same, whether or not the address belongs to anyone.
+    A "no such account" response would turn this form into a directory of who
+    works at a shop, and the people most likely to probe it are exactly the
+    ones a shop least wants finding out.
+    """
+    slug = getattr(request.state, "tenant_slug", None) or payload.tenant_slug
+    ua, ip = _client_meta(request)
+
+    await auth_service.request_password_reset(
+        db,
+        email=payload.email,
+        tenant_slug=slug,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    return Message(message="If that address has an account, a reset link is on its way.")
+
+
+@router.post("/reset-password", response_model=Message)
+async def reset_password(payload: ResetPasswordRequest, db: DbSession) -> Message:
+    """Consume a reset link and set a new password.
+
+    Public by necessity: the person using it cannot sign in. The token is the
+    credential, it works once, and every other session is revoked on success.
+    """
+    await auth_service.reset_password(db, token=payload.token, new_password=payload.new_password)
+    return Message(message="Password updated. You can sign in now; other sessions were signed out.")

@@ -38,7 +38,7 @@ from app.models.sales import (
 )
 from app.models.subscription import Plan, Subscription, SubscriptionInvoice
 from app.models.tenant import Branch, Tenant
-from app.models.user import RefreshToken, User
+from app.models.user import PasswordResetToken, RefreshToken, User
 
 __all__ = [
     "Base",
@@ -63,6 +63,7 @@ __all__ = [
     "SubscriptionInvoice",
     "Branch",
     "Tenant",
+    "PasswordResetToken",
     "RefreshToken",
     "User",
     "BillingCycle",
