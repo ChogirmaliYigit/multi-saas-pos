@@ -63,3 +63,38 @@ async def test_every_protected_table_still_has_its_policy(db):
     with_policy = {row[0] for row in rows}
     missing = sorted(set(all_protected_tables()) - with_policy)
     assert missing == [], f"tables added without an RLS policy migration: {missing}"
+
+
+async def test_production_trusted_hosts_allow_the_container_health_check():
+    """The health check requests http://localhost:8000/health.
+
+    In production TrustedHostMiddleware is active, and with only the real
+    domain allowed that probe gets a 400 -- so the container never reports
+    healthy, `depends_on: service_healthy` never releases, and an orchestrator
+    restarts it forever. Invisible in development, where BASE_DOMAIN happens
+    to be localhost.
+    """
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+    from app.main import create_app
+
+    # Mutate the loaded settings rather than rebuilding them: Settings has no
+    # default SECRET_KEY on purpose, so re-reading it here would fail for a
+    # reason that has nothing to do with what this test checks.
+    original = (settings.ENVIRONMENT, settings.BASE_DOMAIN)
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.BASE_DOMAIN = "example.com"
+        app = create_app()
+
+        allowed: list[str] = []
+        for middleware in app.user_middleware:
+            if middleware.cls is TrustedHostMiddleware:
+                allowed = list(middleware.kwargs["allowed_hosts"])
+
+        assert allowed, "TrustedHostMiddleware is not installed in production"
+        assert "localhost" in allowed, "the container health check would 400"
+        assert "example.com" in allowed
+        assert "*.example.com" in allowed
+    finally:
+        settings.ENVIRONMENT, settings.BASE_DOMAIN = original

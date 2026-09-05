@@ -73,7 +73,17 @@ def create_app() -> FastAPI:
     if settings.is_production:
         app.add_middleware(
             TrustedHostMiddleware,
-            allowed_hosts=[settings.BASE_DOMAIN, f"*.{settings.BASE_DOMAIN}"],
+            allowed_hosts=[
+                settings.BASE_DOMAIN,
+                f"*.{settings.BASE_DOMAIN}",
+                # Loopback must be allowed or the container health check --
+                # which requests http://localhost:8000/health -- gets a 400
+                # and the container never becomes healthy. Nothing reaches
+                # this from outside: Nginx is the only published port, and it
+                # forwards the real Host, which is still validated above.
+                "localhost",
+                "127.0.0.1",
+            ],
         )
 
     _register_exception_handlers(app)
