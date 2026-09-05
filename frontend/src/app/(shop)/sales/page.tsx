@@ -95,10 +95,11 @@ export default function SalesPage() {
                   label: order.status,
                   variant: "outline" as const,
                 };
-                const units = order.items.reduce(
-                  (sum, i) => sum + Number(i.quantity),
-                  0,
-                );
+                // Lines, not summed quantities: adding 1.738 kg of tomatoes
+                // to 2 cans gives a number that means nothing, and summing
+                // decimal strings as JS floats put 5.1259999999999994 on the
+                // screen. A receipt counts lines.
+                const lineCount = order.items.length;
                 // Nothing left to give back once it is fully refunded.
                 const refundable =
                   order.status !== "refunded" && order.status !== "voided";
@@ -114,7 +115,7 @@ export default function SalesPage() {
                         : formatDateTime(order.created_at)}
                     </TableCell>
                     <TableCell className="numeric text-muted-foreground text-right">
-                      {units}
+                      {lineCount}
                     </TableCell>
                     <TableCell className="numeric text-right">
                       {formatMoney(order.total, order.currency)}
