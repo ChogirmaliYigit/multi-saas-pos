@@ -18,8 +18,10 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONF_DIR="$ROOT/deployment/nginx/conf.d"
 
+substituted=0
 for file in "$CONF_DIR"/*.conf; do
     if grep -q "__BASE_DOMAIN__" "$file"; then
+        substituted=$((substituted + 1))
         # Keep a .orig once, so re-running against a different domain still
         # starts from the placeholder rather than a half-substituted file.
         [[ -f "$file.orig" ]] || cp "$file" "$file.orig"
@@ -27,6 +29,17 @@ for file in "$CONF_DIR"/*.conf; do
         echo "configured $(basename "$file") -> $DOMAIN"
     fi
 done
+
+# Silence here means the configs were already substituted for some other
+# domain -- which is how a stale "api.localhost" once shipped unnoticed.
+if [[ $substituted -eq 0 ]]; then
+    echo
+    echo "!! No __BASE_DOMAIN__ placeholders found." >&2
+    echo "!! The configs are already substituted. Current server_name values:" >&2
+    grep -h "server_name" "$CONF_DIR"/*.conf | sed 's/^/     /' >&2
+    echo "!! Restore them with: git checkout -- $CONF_DIR" >&2
+    exit 1
+fi
 
 echo
 echo "Next:"
