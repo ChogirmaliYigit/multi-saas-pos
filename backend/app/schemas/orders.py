@@ -61,6 +61,9 @@ class OrderItemOut(ORMModel):
     tax_amount: Decimal
     tax_inclusive: bool
     line_total: Decimal
+    # How much of this line has already gone back, so a sales list can show
+    # refund state without a second request per order.
+    refunded_quantity: Decimal
 
 
 class PaymentOut(ORMModel):
@@ -86,6 +89,7 @@ class OrderOut(ORMModel):
     total: Decimal
     paid_total: Decimal
     change_due: Decimal
+    refunded_total: Decimal
     currency: str
     note: str | None
     completed_at: datetime | None
@@ -119,3 +123,70 @@ class ReceiptOut(BaseModel):
     cashier_name: str | None
     customer_name: str | None
     printed_at: datetime
+
+
+class RefundLineIn(BaseModel):
+    order_item_id: uuid.UUID
+    quantity: Decimal = Field(gt=0, decimal_places=3)
+
+
+class RefundCreate(BaseModel):
+    # Empty means "everything still refundable on this order".
+    lines: list[RefundLineIn] = Field(default_factory=list)
+    # Defaults to however the customer originally paid -- refunding cash for a
+    # card sale is how a till ends up short.
+    method: PaymentMethod | None = None
+    reason: str | None = Field(default=None, max_length=500)
+    # Off for damaged goods: the money goes back, the item does not go back on
+    # the shelf.
+    restock: bool = True
+    idempotency_key: str | None = Field(default=None, max_length=64)
+
+    # Note there is no `amount`. It is computed from the order's own lines --
+    # a client-supplied refund amount would be a cash-withdrawal endpoint.
+
+
+class RefundLineOut(BaseModel):
+    order_item_id: uuid.UUID
+    product_name: str
+    quantity: Decimal
+    amount: Decimal
+    tax_amount: Decimal
+
+
+class RefundOut(ORMModel):
+    id: uuid.UUID
+    order_id: uuid.UUID
+    amount: Decimal
+    method: PaymentMethod
+    reason: str | None
+    restocked: bool
+    created_at: datetime
+    created_by_id: uuid.UUID | None
+    lines: list[RefundLineOut] = []
+
+
+class RefundableLine(BaseModel):
+    """What the refund screen needs per line: what was sold, what is left."""
+
+    order_item_id: uuid.UUID
+    product_name: str
+    sku: str | None
+    quantity: Decimal
+    refunded_quantity: Decimal
+    refundable_quantity: Decimal
+    unit_price: Decimal
+    line_total: Decimal
+    refundable_amount: Decimal
+
+
+class OrderRefundView(BaseModel):
+    order_number: str
+    status: OrderStatus
+    total: Decimal
+    refunded_total: Decimal
+    refundable_total: Decimal
+    currency: str
+    completed_at: datetime | None
+    lines: list[RefundableLine]
+    refunds: list[RefundOut]

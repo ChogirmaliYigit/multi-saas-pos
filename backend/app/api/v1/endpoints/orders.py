@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -19,10 +20,20 @@ from app.api.deps import (
 from app.core.exceptions import PermissionDeniedError
 from app.core.permissions import Permission, permissions_for
 from app.models.enums import DiscountType, OrderStatus
-from app.models.sales import Order
+from app.models.sales import Order, Refund
 from app.schemas.common import Page
-from app.schemas.orders import OrderCreate, OrderOut, ReceiptOut, ReceiptShop
-from app.services import order_service
+from app.schemas.orders import (
+    OrderCreate,
+    OrderOut,
+    OrderRefundView,
+    ReceiptOut,
+    ReceiptShop,
+    RefundableLine,
+    RefundCreate,
+    RefundLineOut,
+    RefundOut,
+)
+from app.services import order_service, refund_service
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -157,3 +168,104 @@ async def get_receipt(
         customer_name=order.customer.name if order.customer else None,
         printed_at=datetime.now(UTC),
     )
+
+
+# ---------------------------------------------------------------------------
+# Refunds
+# ---------------------------------------------------------------------------
+
+
+def _refund_out(refund: Refund) -> RefundOut:
+    payload = refund.line_items or {}
+    raw = payload.get("lines", []) if isinstance(payload, dict) else []
+    return RefundOut(
+        id=refund.id,
+        order_id=refund.order_id,
+        amount=refund.amount,
+        method=refund.method,
+        reason=refund.reason,
+        restocked=refund.restocked,
+        created_at=refund.created_at,
+        created_by_id=refund.created_by_id,
+        lines=[RefundLineOut(**line) for line in raw],
+    )
+
+
+@router.get(
+    "/{order_id}/refundable",
+    response_model=OrderRefundView,
+    dependencies=[Depends(require(Permission.ORDER_READ))],
+)
+async def refundable(order_id: uuid.UUID, db: DbSession) -> OrderRefundView:
+    """What is still returnable on this order.
+
+    The refund screen needs per-line remainders, not just an order total: a
+    customer bringing back one of three items is the normal case, and the
+    cashier should not have to work out the arithmetic.
+    """
+    order = await refund_service.load_for_refund(db, order_id)
+
+    lines = []
+    for item in order.items:
+        remaining = item.quantity - item.refunded_quantity
+        amount, _tax = refund_service._line_refund_amounts(item, max(remaining, Decimal("0")))
+        lines.append(
+            RefundableLine(
+                order_item_id=item.id,
+                product_name=item.product_name,
+                sku=item.sku,
+                quantity=item.quantity,
+                refunded_quantity=item.refunded_quantity,
+                refundable_quantity=max(remaining, Decimal("0")),
+                unit_price=item.unit_price,
+                line_total=item.line_total,
+                refundable_amount=amount,
+            )
+        )
+
+    return OrderRefundView(
+        order_number=order.order_number,
+        status=order.status,
+        total=order.total,
+        refunded_total=order.refunded_total,
+        refundable_total=order.total - order.refunded_total,
+        currency=order.currency,
+        completed_at=order.completed_at,
+        lines=lines,
+        refunds=[_refund_out(r) for r in order.refunds],
+    )
+
+
+@router.post(
+    "/{order_id}/refund",
+    response_model=RefundOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require(Permission.ORDER_REFUND))],
+)
+async def create_refund(
+    order_id: uuid.UUID,
+    payload: RefundCreate,
+    db: DbSession,
+    user: CurrentUser,
+    tenant: CurrentTenant,
+) -> RefundOut:
+    """Return money and, optionally, stock.
+
+    A separate permission from ringing up a sale: a refund is the shortest
+    path from the till to someone's pocket, so it is not something every
+    cashier holds by default.
+    """
+    order = await refund_service.load_for_refund(db, order_id)
+
+    refund = await refund_service.refund_order(
+        db,
+        tenant=tenant,
+        actor=user,
+        order=order,
+        lines=[line.model_dump() for line in payload.lines],
+        method=payload.method,
+        reason=payload.reason,
+        restock=payload.restock,
+        idempotency_key=payload.idempotency_key,
+    )
+    return _refund_out(refund)
