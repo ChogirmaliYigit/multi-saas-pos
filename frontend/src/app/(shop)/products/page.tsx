@@ -39,6 +39,7 @@ export default function ProductsPage() {
   const canManage = useAuthStore((s) =>
     s.permissions.has(Permission.PRODUCT_MANAGE),
   );
+  const currency = useAuthStore((s) => s.currency) ?? "USD";
   const canSeeCost = useAuthStore((s) =>
     s.permissions.has(Permission.PRODUCT_COST_READ),
   );
@@ -166,11 +167,11 @@ export default function ProductsPage() {
                       {product.sku}
                     </TableCell>
                     <TableCell className="numeric text-right">
-                      {formatMoney(price, "USD")}
+                      {formatMoney(price, currency)}
                     </TableCell>
                     {canSeeCost && (
                       <TableCell className="numeric text-muted-foreground text-right">
-                        {cost === null ? "—" : formatMoney(cost, "USD")}
+                        {cost === null ? "—" : formatMoney(cost, currency)}
                       </TableCell>
                     )}
                     {canSeeCost && (

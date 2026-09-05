@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 export function PosTerminal() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const shopCurrency = useAuthStore((s) => s.currency);
   const printReceipt = usePrintReceipt();
   const autoPrint = usePrinterStore((s) => s.autoPrint);
   const transport = usePrinterStore((s) => s.transport);
@@ -238,7 +239,10 @@ export function PosTerminal() {
     );
   }
 
-  const currency = completed?.order.currency ?? "USD";
+  // The completed order is authoritative once there is one; before the
+  // first sale the shop's own currency has to come from the session,
+  // because a cashier cannot read the shop record to ask.
+  const currency = completed?.order.currency ?? shopCurrency ?? "USD";
   const categories = categoriesQuery.data ?? [];
 
   return (

@@ -29,6 +29,7 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 
 export default function InventoryPage() {
   const canAdjust = useAuthStore((s) => s.permissions.has(Permission.STOCK_ADJUST));
+  const currency = useAuthStore((s) => s.currency) ?? "USD";
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounced(search, 300);
   const [lowOnly, setLowOnly] = useState(false);
@@ -76,7 +77,7 @@ export default function InventoryPage() {
           <CardContent className="flex items-baseline gap-2 px-4 py-0">
             <span className="text-muted-foreground text-sm">Stock value shown</span>
             <span className="numeric font-semibold">
-              {formatMoney(totalValue, "USD")}
+              {formatMoney(totalValue, currency)}
             </span>
           </CardContent>
         </Card>
@@ -149,7 +150,7 @@ export default function InventoryPage() {
                       {Number.parseFloat(item.low_stock_threshold) || "—"}
                     </TableCell>
                     <TableCell className="numeric text-right">
-                      {formatMoney(item.stock_value, "USD")}
+                      {formatMoney(item.stock_value, currency)}
                     </TableCell>
                     <TableCell>
                       {canAdjust && (

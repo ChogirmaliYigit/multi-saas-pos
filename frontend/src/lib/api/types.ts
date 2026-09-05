@@ -29,6 +29,8 @@ export interface UserPublic {
 
 export interface SessionInfo {
   user: UserPublic;
+  /** The shop's currency. Present for shop staff, null for platform admins. */
+  currency: string | null;
   tenant_slug: string | null;
   /** Exactly what the API will allow. The UI hides what this omits. */
   permissions: string[];

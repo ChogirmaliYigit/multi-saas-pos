@@ -9,6 +9,7 @@ import type { PermissionValue } from "@/lib/permissions";
 interface AuthState {
   user: UserPublic | null;
   tenantSlug: string | null;
+  currency: string | null;
   permissions: Set<string>;
   /** False until the first refresh attempt settles, so guards can wait. */
   isReady: boolean;
@@ -33,6 +34,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   tenantSlug: null,
+  currency: null,
   permissions: new Set<string>(),
   isReady: false,
 
@@ -40,6 +42,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({
       user: session.user,
       tenantSlug: session.tenant_slug,
+      currency: session.currency,
       permissions: new Set(session.permissions),
       isReady: true,
     }),

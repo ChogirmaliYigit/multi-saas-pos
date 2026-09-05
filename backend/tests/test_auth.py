@@ -233,3 +233,57 @@ async def test_custom_validator_failures_return_422_not_500(client: AsyncClient)
 
     malformed = await client.post("/api/v1/auth/signup", json={**SIGNUP, "slug": "Not A Slug!"})
     assert malformed.status_code == 422
+
+
+async def test_session_carries_the_shops_currency(client: AsyncClient):
+    """The POS terminal renders prices before any sale exists, and a cashier
+    has no permission to read the shop record. Without this the terminal has
+    nothing to format with and falls back to dollars in a so'm shop."""
+    await client.post(
+        "/api/v1/auth/signup",
+        json={
+            "shop_name": "So'm Do'kon",
+            "slug": "somshop",
+            "owner_name": "Dilshod Rahimov",
+            "email": "dilshod@somshop.example",
+            "password": "correct-horse-battery",
+            "currency": "UZS",
+            "country_code": "UZ",
+            "plan_code": "basic",
+        },
+    )
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "dilshod@somshop.example",
+            "password": "correct-horse-battery",
+            "tenant_slug": "somshop",
+        },
+    )
+    owner = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    await client.post(
+        "/api/v1/employees",
+        json={
+            "full_name": "Aziz Tursunov",
+            "email": "aziz@somshop.example",
+            "password": "till-operator-pass",
+            "role": "cashier",
+        },
+        headers=owner,
+    )
+    cashier_login = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "aziz@somshop.example",
+            "password": "till-operator-pass",
+            "tenant_slug": "somshop",
+        },
+    )
+    cashier = {"Authorization": f"Bearer {cashier_login.json()['access_token']}"}
+
+    # The cashier cannot read the shop record...
+    assert (await client.get("/api/v1/shop", headers=cashier)).status_code == 403
+    # ...but still learns the currency, which is not a secret.
+    assert (await client.get("/api/v1/auth/me", headers=cashier)).json()["currency"] == "UZS"
+    assert (await client.get("/api/v1/auth/me", headers=owner)).json()["currency"] == "UZS"

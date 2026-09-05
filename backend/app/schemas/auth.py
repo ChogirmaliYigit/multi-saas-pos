@@ -133,3 +133,6 @@ class SessionInfo(BaseModel):
     user: UserPublic
     tenant_slug: str | None
     permissions: list[str]
+    # Every screen that shows a price needs this, including the terminal,
+    # which a cashier reaches without permission to read the shop record.
+    currency: str | None = None

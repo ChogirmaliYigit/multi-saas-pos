@@ -8,6 +8,7 @@ from app.core.exceptions import InvalidCredentialsError, PermissionDeniedError
 from app.core.permissions import permissions_for
 from app.core.security import hash_password, hash_pin, verify_password
 from app.models.enums import UserRole
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -132,13 +133,27 @@ async def logout(payload: RefreshRequest, db: DbSession) -> Message:
 
 
 @router.get("/me", response_model=SessionInfo)
-async def me(request: Request, current_user: CurrentUser) -> SessionInfo:
-    """Everything the frontend needs to render the shell: identity, shop, and
-    the exact permission set, so the UI hides what the API would refuse."""
+async def me(request: Request, db: DbSession, current_user: CurrentUser) -> SessionInfo:
+    """Everything the frontend needs to render the shell: identity, shop, the
+    exact permission set so the UI hides what the API would refuse, and the
+    shop's currency.
+
+    The currency is here rather than behind /shop because the POS terminal has
+    to render prices and a cashier has no permission to read the shop record.
+    Without it the terminal has nothing to format with until the first sale
+    completes, and falls back to dollars in a so'm shop.
+    """
+    currency = None
+    if current_user.tenant_id is not None:
+        currency = await db.scalar(
+            select(Tenant.currency).where(Tenant.id == current_user.tenant_id)
+        )
+
     return SessionInfo(
         user=UserPublic.model_validate(current_user),
         tenant_slug=getattr(request.state, "tenant_slug", None),
         permissions=sorted(permissions_for(current_user.role, current_user.permission_overrides)),
+        currency=currency,
     )
 
 
