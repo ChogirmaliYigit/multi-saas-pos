@@ -34,6 +34,18 @@ log "Rolling out"
 sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$TAG/" .env && rm -f .env.bak
 IMAGE_TAG="$TAG" docker compose up -d --no-deps api worker beat nginx
 
+# Nginx config lives in a bind mount, so compose sees no change to the
+# container and leaves it running with the configuration it started with.
+# Edits then ship without taking effect -- a rate limit that is present in
+# the file and absent from the running server. Validate, then reload.
+if docker compose exec -T nginx nginx -t >/dev/null 2>&1; then
+    docker compose exec -T nginx nginx -s reload >/dev/null 2>&1 || true
+    log "Nginx configuration reloaded"
+else
+    log "WARNING: Nginx config failed validation; left running with the previous one"
+    docker compose exec -T nginx nginx -t 2>&1 | tail -3 >&2
+fi
+
 log "Waiting for the API to report ready"
 for attempt in $(seq 1 30); do
     if docker compose exec -T api curl -fsS http://localhost:8000/health/ready >/dev/null 2>&1; then
