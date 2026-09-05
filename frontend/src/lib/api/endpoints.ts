@@ -10,6 +10,7 @@ import type {
 } from "./pos-types";
 import type {
   BillingOverview,
+  Branch,
   DashboardSummary,
   Employee,
   LowStockItem,
@@ -22,6 +23,7 @@ import type {
   ReportJob,
   RevenuePoint,
   SalesByHour,
+  ShopSettings,
   StockLevel,
   StockMovement,
   TaxRate,
@@ -53,6 +55,13 @@ export const authApi = {
       new_password: newPassword,
     }),
   setPin: (pin: string) => api.post<{ message: string }>("/auth/set-pin", { pin }),
+
+  /** Your own name, phone and avatar. Role and branch are granted, not chosen. */
+  updateProfile: (body: {
+    full_name?: string;
+    phone?: string | null;
+    avatar_url?: string | null;
+  }) => api.patch<UserPublic>("/auth/me", body),
 
   // Both are public -- the caller has no session by definition.
   forgotPassword: (email: string, tenantSlug: string | null) =>
@@ -210,12 +219,41 @@ export const productsApi = {
   taxRates: () => api.get<TaxRate[]>("/catalog/tax-rates"),
 };
 
+export const taxRatesApi = {
+  list: () => api.get<TaxRate[]>("/catalog/tax-rates"),
+  create: (body: { name: string; rate: string; is_inclusive?: boolean }) =>
+    api.post<TaxRate>("/catalog/tax-rates", body),
+  update: (id: string, body: Record<string, unknown>) =>
+    api.patch<TaxRate>(`/catalog/tax-rates/${id}`, body),
+  remove: (id: string) =>
+    api.delete<{ message: string }>(`/catalog/tax-rates/${id}`),
+};
+
+export const branchesApi = {
+  list: () => api.get<Branch[]>("/branches"),
+  create: (body: {
+    name: string;
+    code: string;
+    address?: string | null;
+    phone?: string | null;
+    is_default?: boolean;
+  }) => api.post<Branch>("/branches", body),
+  update: (id: string, body: Record<string, unknown>) =>
+    api.patch<Branch>(`/branches/${id}`, body),
+  remove: (id: string) => api.delete<{ message: string }>(`/branches/${id}`),
+};
+
+export const shopApi = {
+  get: () => api.get<ShopSettings>("/shop"),
+  update: (body: Record<string, unknown>) => api.patch<ShopSettings>("/shop", body),
+};
+
 export const categoriesApi = {
   list: () => catalogApi.categories(),
   create: (body: { name: string; color?: string | null }) =>
-    api.post("/catalog/categories", body),
+    api.post<Category>("/catalog/categories", body),
   update: (id: string, body: Record<string, unknown>) =>
-    api.patch(`/catalog/categories/${id}`, body),
+    api.patch<Category>(`/catalog/categories/${id}`, body),
   remove: (id: string) =>
     api.delete<{ message: string }>(`/catalog/categories/${id}`),
 };

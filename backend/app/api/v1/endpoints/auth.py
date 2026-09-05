@@ -24,6 +24,7 @@ from app.schemas.auth import (
     UserPublic,
 )
 from app.schemas.common import Message
+from app.schemas.shop import ProfileUpdate
 from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -139,6 +140,19 @@ async def me(request: Request, current_user: CurrentUser) -> SessionInfo:
         tenant_slug=getattr(request.state, "tenant_slug", None),
         permissions=sorted(permissions_for(current_user.role, current_user.permission_overrides)),
     )
+
+
+@router.patch("/me", response_model=UserPublic)
+async def update_me(payload: ProfileUpdate, current_user: CurrentUser) -> UserPublic:
+    """Edit your own name, phone, and avatar.
+
+    Deliberately not role, branch, or permissions: those are granted by
+    someone else, and a self-service endpoint that touched them would be a
+    privilege-escalation hole.
+    """
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(current_user, field, value)
+    return UserPublic.model_validate(current_user)
 
 
 @router.post("/change-password", response_model=Message)

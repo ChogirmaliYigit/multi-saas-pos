@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     platform,
     reports,
     shifts,
+    shop,
 )
 
 api_router = APIRouter()
@@ -22,6 +23,7 @@ api_router.include_router(inventory.router)
 api_router.include_router(orders.router)
 api_router.include_router(shifts.router)
 api_router.include_router(employees.router)
+api_router.include_router(shop.router)
 api_router.include_router(analytics.router)
 api_router.include_router(reports.router)
 api_router.include_router(billing.router)

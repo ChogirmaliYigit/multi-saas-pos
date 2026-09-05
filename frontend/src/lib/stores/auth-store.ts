@@ -14,6 +14,7 @@ interface AuthState {
   isReady: boolean;
 
   setSession: (session: SessionInfo) => void;
+  setUser: (user: UserPublic) => void;
   setAccessToken: (token: string, expiresIn: number) => void;
   markReady: () => void;
   clear: () => void;
@@ -42,6 +43,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       permissions: new Set(session.permissions),
       isReady: true,
     }),
+
+  /** Profile edits only. Permissions are untouched -- they are not the
+      user's to change. */
+  setUser: (user) => set({ user }),
 
   setAccessToken: (token, expiresIn) => setAccessToken(token, expiresIn),
 

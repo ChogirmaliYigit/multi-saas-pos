@@ -261,3 +261,38 @@ export interface BillingOverview {
   pay_links: PayLink[];
   invoices: Invoice[];
 }
+
+export interface Branch {
+  id: string;
+  name: string;
+  code: string;
+  address: string | null;
+  phone: string | null;
+  timezone: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  staff_count: number;
+  product_count: number;
+  orders_last_30_days: number;
+}
+
+export interface ShopSettings {
+  id: string;
+  name: string;
+  slug: string;
+  legal_name: string | null;
+  tax_number: string | null;
+  email: string;
+  phone: string | null;
+  address: string | null;
+  country_code: string;
+  currency: string;
+  timezone: string;
+  locale: string;
+  logo_url: string | null;
+  receipt_header: string | null;
+  receipt_footer: string | null;
+  status: string;
+  settings: Record<string, unknown>;
+}

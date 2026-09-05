@@ -113,6 +113,7 @@ class UserPublic(ORMModel):
     role: UserRole
     tenant_id: uuid.UUID | None
     branch_id: uuid.UUID | None
+    phone: str | None
     avatar_url: str | None
     is_active: bool
 

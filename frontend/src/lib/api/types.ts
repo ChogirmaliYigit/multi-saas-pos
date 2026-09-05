@@ -22,6 +22,7 @@ export interface UserPublic {
   role: UserRole;
   tenant_id: string | null;
   branch_id: string | null;
+  phone: string | null;
   avatar_url: string | null;
   is_active: boolean;
 }
