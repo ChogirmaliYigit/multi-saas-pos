@@ -12,7 +12,9 @@ set -euo pipefail
 
 API_BASE="${API_BASE:-}"
 SLUG="smoke-$(date +%s)"
-EMAIL="$SLUG@smoke.invalid"
+# example.com, not .invalid: RFC 2606 reserves .invalid, and email
+# validators reject special-use TLDs outright.
+EMAIL="$SLUG@example.com"
 PASSWORD="smoke-test-passphrase-only"
 CLEANUP=0
 [[ "${1:-}" == "--cleanup" ]] && CLEANUP=1
