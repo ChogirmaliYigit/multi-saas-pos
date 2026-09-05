@@ -100,11 +100,29 @@ if [[ -s /root/.ssh/authorized_keys ]] || [[ -n "$(find /home -name authorized_k
     log "Disabling SSH password authentication (a key is present)"
     sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
-    sshd -t && systemctl reload ssh
+    # /run/sshd must exist or `sshd -t` fails on Ubuntu 24.04 -- and because
+    # the reload is chained to it, hardening would be written to the file and
+    # never applied. Silent, and exactly the kind of thing you only discover
+    # during an incident.
+    mkdir -p /run/sshd
+    if sshd -t; then
+        systemctl reload ssh
+    else
+        echo "!! sshd config failed validation -- NOT reloading" >&2
+    fi
 else
     echo
     echo "!! No authorized_keys found -- leaving password login enabled."
     echo "!! Install your key first, then re-run to harden SSH."
+fi
+
+DEPLOY_USER="${SUDO_USER:-}"
+if [[ -n "$DEPLOY_USER" && "$DEPLOY_USER" != "root" ]]; then
+    log "Adding $DEPLOY_USER to the docker group"
+    # Otherwise every compose command needs sudo, and a deploy script that
+    # half-uses sudo ends up writing root-owned files into a user's checkout.
+    usermod -aG docker "$DEPLOY_USER"
+    echo "   (log out and back in for this to take effect)"
 fi
 
 log "Creating the deploy directory"
